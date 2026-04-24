@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BFHL Node Processor</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Special+Elite&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #111111;
+      --ink-mid: #333333;
+      --ink-light: #666666;
+      --ink-faint: #999999;
+      --paper: #fafafa;
+      --paper-mid: #f2f2f0;
+      --paper-dark: #e8e8e5;
+      --white: #ffffff;
+      --shadow: 4px 4px 0px #111111;
+      --shadow-sm: 3px 3px 0px #333333;
+      --shadow-xs: 2px 2px 0px #888888;
+    }
+
+    html { background: var(--paper); }
+
+    body {
+      font-family: 'Caveat', cursive;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 40px 24px 60px;
+      position: relative;
+    }
+
+    /* Paper grain texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Faint ruled lines on background */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        transparent 31px,
+        rgba(0,0,0,0.04) 31px,
+        rgba(0,0,0,0.04) 32px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page-wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── HEADER ── */
+    header {
+      margin-bottom: 44px;
+      text-align: left;
+      opacity: 0;
+      animation: drift-in 0.5s ease 0.05s forwards;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--ink);
+      position: relative;
+    }
+
+    /* Sketch underline wobble */
+    .header-inner::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--ink);
+      filter: url(#sketch);
+      opacity: 0.3;
+    }
+
+    .header-title {
+      font-size: 56px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+
+    .header-title span {
+      display: inline-block;
+      border-bottom: 3px solid var(--ink);
+    }
+
+    .header-meta {
+      text-align: right;
+    }
+
+    .header-sub {
+      font-family: 'Special Elite', monospace;
+      font-size: 12px;
+      color: var(--ink-light);
+      letter-spacing: 1px;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1.5px solid var(--ink-mid);
+      padding: 3px 10px;
+      font-family: 'Special Elite', monospace;
+      font-size: 10px;
+      color: var(--ink-mid);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--ink);
+      border-radius: 50%;
+    }
+
+    /* ── GRID ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    @media (max-width: 800px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .header-title { font-size: 40px; }
+      body { padding: 24px 16px 48px; }
+    }
+
+    /* ── PANEL / CARD ── */
+    .panel {
+      background: var(--white);
+      border: 2px solid var(--ink);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      position: relative;
+      opacity: 0;
+    }
+
+    .panel-input {
+      animation: drift-in 0.5s ease 0.1s forwards;
+    }
+
+    .panel-results {
+      animation: drift-in 0.5s ease 0.25s forwards;
+    }
+
+    /* Folded corner effect */
+    .panel::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 0 0 18px 18px;
+      border-color: transparent transparent var(--paper-dark) transparent;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      font-family: 'Special Elite', monospace;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-label::before {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 1.5px;
+      background: var(--ink-faint);
+    }
+
+    .panel-title {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── TEXTAREA ── */
+    textarea {
+      width: 100%;
+      height: 190px;
+      border: 2px solid var(--ink-mid);
+      background: var(--paper);
+      font-family: 'Special Elite', monospace;
+      font-size: 13px;
+      color: var(--ink);
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+      line-height: 1.7;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    textarea:focus {
+      border-color: var(--ink);
+      background: var(--white);
+    }
+
+    textarea::placeholder {
+      color: var(--ink-faint);
+      font-style: italic;
+    }
+
+    /* ── BUTTONS ── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      font-family: 'Caveat', cursive;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 2px solid var(--ink);
+      padding: 8px 20px;
+      transition: transform 0.15s, box-shadow 0.15s, background 0.15s, color 0.15s;
+      position: relative;
+      letter-spacing: 0.3px;
+    }
+
+    .btn-secondary {
+      background: var(--white);
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+      flex: 0 0 auto;
+    }
+
+    .btn-primary {
+      background: var(--ink);
+      color: var(--white);
+      box-shadow: var(--shadow-sm);
+      flex: 1;
+    }
+
+    .btn-secondary:hover {
+      background: var(--ink);
+      color: var(--white);
+      transform: translateY(-2px);
+      box-shadow: 5px 5px 0 var(--ink);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--white);
+      color: var(--ink);
+      transform: translateY(-2px);
+      box-shadow: 5px 5px 0 var(--ink);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ── RESULTS PLACEHOLDER ── */
+    .placeholder-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      gap: 16px;
+    }
+
+    .placeholder-sketch {
+      width: 120px;
+      height: 90px;
+      opacity: 0.18;
+    }
+
+    .placeholder-txt {
+      font-size: 20px;
+      color: var(--ink-faint);
+      font-style: italic;
+    }
+
+    /* ── SUMMARY STATS ── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .stat-box {
+      border: 2px solid var(--ink);
+      box-shadow: var(--shadow-xs);
+      padding: 14px 10px;
+      text-align: center;
+      background: var(--white);
+    }
+
+    .stat-val {
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1;
+      display: block;
+    }
+
+    .stat-lbl {
+      font-family: 'Special Elite', monospace;
+      font-size: 9px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--ink-light);
+      display: block;
+      margin-top: 4px;
+    }
+
+    /* ── SECTION DIVIDER ── */
+    .section-div {
+      font-size: 17px;
+      font-style: italic;
+      color: var(--ink-mid);
+      text-align: center;
+      margin: 20px 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-div::before,
+    .section-div::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: repeating-linear-gradient(to right, var(--ink-mid) 0, var(--ink-mid) 4px, transparent 4px, transparent 8px);
+    }
+
+    /* ── HIERARCHY ITEMS ── */
+    .hier-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hier-item {
+      border: 2px solid var(--ink-mid);
+      background: var(--white);
+      box-shadow: var(--shadow-xs);
+      opacity: 0;
+      transform: translateX(-16px);
+      transition: box-shadow 0.2s;
+    }
+
+    .hier-item:hover {
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    .hier-item.visible {
+      animation: slide-in 0.35s ease forwards;
+    }
+
+    .hier-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--paper-mid);
+      border-bottom: 1.5px solid transparent;
+      transition: background 0.15s;
+    }
+
+    .hier-head:hover { background: var(--paper-dark); }
+
+    .hier-head.open { border-bottom-color: var(--ink-mid); }
+
+    .root-badge {
+      background: var(--ink);
+      color: var(--white);
+      font-family: 'Caveat', cursive;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 2px 12px;
+      letter-spacing: 1px;
+    }
+
+    .depth-tag {
+      font-family: 'Special Elite', monospace;
+      font-size: 11px;
+      color: var(--ink-light);
+      border: 1px dashed var(--ink-light);
+      padding: 2px 8px;
+    }
+
+    .cycle-tag {
+      font-family: 'Special Elite', monospace;
+      font-size: 11px;
+      color: var(--ink-mid);
+      border: 1.5px solid var(--ink-mid);
+      padding: 2px 8px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-style: italic;
+    }
+
+    .chevron {
+      margin-left: auto;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .chevron.open { transform: rotate(180deg); }
+
+    .hier-body {
+      display: none;
+      padding: 14px 16px;
+      background: var(--paper);
+    }
+
+    .hier-body.open { display: block; }
+
+    .tree-pre {
+      font-family: 'Special Elite', monospace;
+      font-size: 12.5px;
+      line-height: 1.8;
+      color: var(--ink-mid);
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .tree-pre .node-name {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .cycle-msg {
+      font-family: 'Special Elite', monospace;
+      font-size: 12px;
+      color: var(--ink-light);
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── BADGES (invalid/dup) ── */
+    .badges-section { margin-top: 18px; }
+
+    .badges-head {
+      font-size: 19px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badges-head-sym {
+      font-family: 'Special Elite', monospace;
+      font-size: 16px;
+    }
+
+    .badge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .entry-tag {
+      font-family: 'Special Elite', monospace;
+      font-size: 11px;
+      color: var(--ink-mid);
+      background: var(--paper-mid);
+      padding: 3px 10px;
+      border: 1.5px dashed var(--ink-light);
+      display: inline-block;
+    }
+
+    .entry-tag.dup {
+      border-style: solid;
+      border-color: var(--ink-mid);
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--white);
+      border: 2px solid var(--ink);
+      box-shadow: var(--shadow);
+      padding: 12px 20px;
+      font-family: 'Caveat', cursive;
+      font-size: 18px;
+      color: var(--ink);
+      max-width: 320px;
+      z-index: 999;
+      animation: toast-in 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes drift-in {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(-16px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes dots {
+      0%   { content: 'thinking.'; }
+      33%  { content: 'thinking..'; }
+      66%  { content: 'thinking...'; }
+    }
+
+    .thinking::after {
+      content: 'thinking.';
+      animation: dots 1s steps(1) infinite;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: 52px;
+      text-align: center;
+      font-family: 'Special Elite', monospace;
+      font-size: 10px;
+      color: var(--ink-faint);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0;
+      animation: drift-in 0.5s ease 0.5s forwards;
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--paper-mid); }
+    ::-webkit-scrollbar-thumb { background: var(--ink-light); }
+  </style>
+</head>
+<body>
+
+<!-- SVG Filters -->
+<svg width="0" height="0" style="position:absolute;overflow:hidden">
+  <defs>
+    <filter id="sketch">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="sketch-heavy">
+      <feTurbulence type="fractalNoise" baseFrequency="0.065" numOctaves="3" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="page-wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="header-inner">
+      <div>
+        <div class="header-title">
+          <span>Node</span> <span>Processor</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid -->
+  <div class="main-grid">
+
+    <!-- Input Panel -->
+    <div class="panel panel-input">
+      <div class="panel-label">input</div>
+      <div class="panel-title">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M3 11 L18 11 M13 5 L19 11 L13 17" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Enter Edges
+      </div>
+
+      <textarea
+        id="edge-input"
+        placeholder="A->B, A->C, B->D&#10;X->Y, Y->Z, Z->X&#10;P->Q, Q->R&#10;hello, 1->2, A->"
+        spellcheck="false"
+      ></textarea>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="loadExample()">load example</button>
+        <button class="btn-primary" id="proc-btn" onclick="processEdges()">process →</button>
+      </div>
+
+      <!-- Tiny tip -->
+      <p style="margin-top:14px;font-family:'Special Elite',monospace;font-size:10px;color:var(--ink-faint);letter-spacing:0.5px">
+        separate edges with commas or newlines — e.g. A-&gt;B, B-&gt;C
+      </p>
+    </div>
+
+    <!-- Results Panel -->
+    <div class="panel panel-results" id="results-panel">
+      <div class="panel-label">output</div>
+      <div class="panel-title">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <rect x="3" y="3" width="16" height="16" rx="1" stroke="#111" stroke-width="2"/>
+          <path d="M7 8h8M7 12h5" stroke="#111" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Analysis
+      </div>
+      <div id="results-body">
+        <div class="placeholder-wrap">
+          <svg class="placeholder-sketch" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="18" r="10" stroke="#111" stroke-width="2" stroke-dasharray="4 2"/>
+            <circle cx="30" cy="60" r="10" stroke="#111" stroke-width="2" stroke-dasharray="4 2"/>
+            <circle cx="90" cy="60" r="10" stroke="#111" stroke-width="2" stroke-dasharray="4 2"/>
+            <path d="M52 24 Q40 40 38 50" stroke="#111" stroke-width="1.5" stroke-dasharray="3 2"/>
+            <path d="M68 24 Q80 40 82 50" stroke="#111" stroke-width="1.5" stroke-dasharray="3 2"/>
+          </svg>
+          <span class="placeholder-txt">results appear here</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>node processor</footer>
+</div>
+
+<script>
+  const API_URL = 'http://localhost:3000';
+
+  function loadExample() {
+    document.getElementById('edge-input').value =
+      'A->B, A->C, B->D, C->E, E->F\nX->Y, Y->Z, Z->X\nP->Q, Q->R\nG->H, G->H, G->I\nhello, 1->2, A->';
+  }
+
+  async function processEdges() {
+    const raw = document.getElementById('edge-input').value;
+    const btn = document.getElementById('proc-btn');
+    const edges = raw.split(/[,\n]/).map(e => e.trim()).filter(e => e.length > 0);
+
+    if (!edges.length) { showToast('✗ enter at least one edge'); return; }
+
+    btn.disabled = true;
+    btn.textContent = '';
+    btn.classList.add('thinking');
+
+    try {
+      const res = await fetch(API_URL + '/bfhl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: edges })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      renderResults(data);
+    } catch (err) {
+      showToast('✗ ' + err.message + ' — is the API running?');
+    } finally {
+      btn.classList.remove('thinking');
+      btn.disabled = false;
+      btn.textContent = 'process →';
+    }
+  }
+
+  function renderResults(d) {
+    const s = d.summary || {};
+    let html = '';
+
+    // Summary stats
+    html += `<div class="summary-row">
+      <div class="stat-box">
+        <span class="stat-val">${s.total_trees ?? 0}</span>
+        <span class="stat-lbl">trees</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-val">${s.total_cycles ?? 0}</span>
+        <span class="stat-lbl">cycles</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-val" style="font-size:${s.largest_tree_root ? '36px' : '22px'}">${s.largest_tree_root || '—'}</span>
+        <span class="stat-lbl">deepest root</span>
+      </div>
+    </div>`;
+
+    // Hierarchies
+    if (d.hierarchies && d.hierarchies.length) {
+      html += `<div class="section-div">— hierarchies —</div>`;
+      html += `<div class="hier-list">`;
+      d.hierarchies.forEach((h, i) => {
+        const depthTag = h.has_cycle
+          ? `<span class="cycle-tag">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M10 6A4 4 0 1 1 6 2" stroke="#333" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M6 0l2 2-2 2" stroke="#333" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              cycle
+             </span>`
+          : `<span class="depth-tag">depth: ${h.depth}</span>`;
+
+        const bodyContent = h.has_cycle
+          ? `<div class="cycle-msg">
+               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                 <path d="M12 7A5 5 0 1 1 7 2" stroke="#666" stroke-width="1.5" stroke-linecap="round"/>
+                 <path d="M7 0l2.5 2L7 4" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+               </svg>
+               circular dependency — no tree structure
+             </div>`
+          : `<pre class="tree-pre">${buildTreeText(h.tree, h.root)}</pre>`;
+
+        html += `
+          <div class="hier-item" id="hier-${i}">
+            <div class="hier-head" onclick="toggleHier(${i})">
+              <span class="root-badge">${h.root}</span>
+              ${depthTag}
+              <svg class="chevron" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 4.5 L7 9.5 L12 4.5" stroke="#666" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="hier-body" id="body-${i}">${bodyContent}</div>
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Invalid entries
+    if (d.invalid_entries && d.invalid_entries.length) {
+      html += `<div class="badges-section">
+        <div class="badges-head">
+          <span class="badges-head-sym">✗</span> invalid
+          <span style="font-family:'Special Elite',monospace;font-size:13px;color:var(--ink-light);font-weight:400">(${d.invalid_entries.length})</span>
+        </div>
+        <div class="badge-list">
+          ${d.invalid_entries.map(e => `<span class="entry-tag">${e || '""'}</span>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    // Duplicates
+    if (d.duplicate_edges && d.duplicate_edges.length) {
+      html += `<div class="badges-section">
+        <div class="badges-head">
+          <span class="badges-head-sym">≈</span> duplicates
+          <span style="font-family:'Special Elite',monospace;font-size:13px;color:var(--ink-light);font-weight:400">(${d.duplicate_edges.length})</span>
+        </div>
+        <div class="badge-list">
+          ${d.duplicate_edges.map(e => `<span class="entry-tag dup">${e}</span>`).join('')}
+        </div>
+      </div>`;
+    }
+
+    document.getElementById('results-body').innerHTML = html;
+
+    // Stagger hierarchy items
+    if (d.hierarchies) {
+      d.hierarchies.forEach((_, i) => {
+        const el = document.getElementById('hier-' + i);
+        if (el) setTimeout(() => el.classList.add('visible'), i * 80);
+      });
+    }
+  }
+
+  function toggleHier(i) {
+    const head = document.querySelector(`#hier-${i} .hier-head`);
+    const body = document.getElementById('body-' + i);
+    const chev = document.querySelector(`#hier-${i} .chevron`);
+    const isOpen = body.classList.toggle('open');
+    head.classList.toggle('open', isOpen);
+    chev.classList.toggle('open', isOpen);
+  }
+
+  function buildTreeText(treeObj, rootKey, prefix, isRoot) {
+    if (isRoot === undefined) isRoot = true;
+    const obj = isRoot ? (treeObj[rootKey] || {}) : treeObj;
+    const keys = Object.keys(obj);
+    let lines = isRoot ? `<span class="node-name">${rootKey}</span>\n` : '';
+
+    keys.forEach((k, idx) => {
+      const last = idx === keys.length - 1;
+      const branch = last ? '└── ' : '├── ';
+      const childPfx = prefix + (last ? '    ' : '│   ');
+      lines += prefix + branch + `<span class="node-name">${k}</span>\n`;
+      if (Object.keys(obj[k]).length > 0) {
+        lines += buildTreeText(obj[k], null, childPfx, false);
+      }
+    });
+    return lines;
+  }
+
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="1" width="14" height="14" stroke="#111" stroke-width="1.5"/>
+      <path d="M5 5l6 6M11 5l-6 6" stroke="#111" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>${msg}`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+</script>
+</body>
+</html>
