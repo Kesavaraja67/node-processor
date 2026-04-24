@@ -4,7 +4,7 @@ A full-stack application designed to parse, validate, and analyze hierarchical n
 
 ### 🌐 Live Links
 - **Frontend (Web App):** [https://node-processor.netlify.app](https://node-processor.netlify.app)
-- **Backend (API):** [https://node-processor.onrender.com](https://node-processor.onrender.com)
+- **Backend (API):** [https://node-processor.onrender.com](https://node-processor.onrender.com/bfhl)
 
 ---
 
@@ -48,9 +48,9 @@ Processes node edges and returns a structured hierarchical analysis.
 **Response:**
 ```json
 {
-  "user_id": "kesavarajaM_03052006",
-  "email_id": "km0308@srmist.edu.in",
-  "college_roll_number": "RA2311026050099",
+  "user_id": "yourname_ddmmyyyy",
+  "email_id": "name@.edu.in",
+  "college_roll_number": "Regno12345",
   "hierarchies": [
     {
       "root": "A",
